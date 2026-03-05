@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+
+<rect width="512" height="512" rx="110" fill="#111"></rect>
+
+<!-- Door -->
+<rect x="150" y="110" width="150" height="290" rx="12" fill="#ff3b30"></rect>
+
+<!-- Door knob -->
+<circle cx="275" cy="255" r="10" fill="#ffffff"></circle>
+
+<!-- Speech waves -->
+<path d="M340 200
+         q60 55 0 110" stroke="#34c759" stroke-width="20" fill="none" stroke-linecap="round"></path>
+
+<path d="M370 170
+         q100 85 0 170" stroke="#34c759" stroke-width="20" fill="none" stroke-linecap="round"></path>
+
+</svg>
