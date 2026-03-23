@@ -47,6 +47,20 @@
         width: 100%;
       }
 
+      .control-toggle {
+        margin: 0 16px 8px;
+        width: calc(100% - 32px);
+        font-size: 16px;
+        padding: 10px 14px;
+        border-radius: 16px;
+        box-shadow: none;
+        opacity: 0.85;
+      }
+
+      .control-panel {
+        padding: 0 16px 8px;
+      }
+
       .grid {
         flex: 1;
         display: grid;
@@ -102,6 +116,20 @@
       <input id="tone" type="range" min="0" max="1" step="0.01" value="0.55" />
     </div>
 
+    <button id="toggleControls" class="control-toggle" type="button">Pitch/Volume settings</button>
+
+    <div id="extraControls" class="control-panel" hidden>
+      <div class="tone">
+        <label for="pitch">Pitch</label>
+        <input id="pitch" type="range" min="0" max="1" step="0.01" value="0.5" />
+      </div>
+
+      <div class="tone">
+        <label for="volume">Volume</label>
+        <input id="volume" type="range" min="0" max="1" step="0.01" value="1" />
+      </div>
+    </div>
+
     <div class="grid">
       <button class="who" onclick="play('who')">누구세요</button>
 
@@ -125,8 +153,16 @@
       };
 
       const TONE_STORAGE_KEY = "who-is-this:tone";
+      const PITCH_STORAGE_KEY = "who-is-this:pitch";
+      const VOLUME_STORAGE_KEY = "who-is-this:volume";
+      const CONTROLS_OPEN_STORAGE_KEY = "who-is-this:controlsOpen";
 
       const toneEl = document.getElementById("tone");
+      const pitchEl = document.getElementById("pitch");
+      const volumeEl = document.getElementById("volume");
+      const toggleControlsEl = document.getElementById("toggleControls");
+      const extraControlsEl = document.getElementById("extraControls");
+
       let audioCtx = null;
       const buffers = {};
 
@@ -135,7 +171,15 @@
       let lowpass = null;
       let gainNode = null;
 
+      function clamp01(x) {
+        const n = Number(x);
+        if (!Number.isFinite(n)) return 0;
+        return Math.max(0, Math.min(1, n));
+      }
+
       let lastTone = toneEl ? parseFloat(toneEl.value) : 0.55;
+      let lastPitch = pitchEl ? clamp01(pitchEl.value) : 0.5;
+      let lastVolume = volumeEl ? clamp01(volumeEl.value) : 1;
 
       // 페이지 로드 시 저장된 tone 값을 복원합니다.
       if (toneEl) {
@@ -151,6 +195,42 @@
           }
         } catch (_) {
           // localStorage 접근이 차단된 환경에서도 앱이 동작해야 합니다.
+        }
+      }
+
+      // 페이지 로드 시 pitch/volume 값을 복원합니다.
+      if (pitchEl) {
+        try {
+          const raw = localStorage.getItem(PITCH_STORAGE_KEY);
+          if (raw !== null) {
+            lastPitch = clamp01(raw);
+            pitchEl.value = String(lastPitch);
+          }
+        } catch (_) {}
+      }
+
+      if (volumeEl) {
+        try {
+          const raw = localStorage.getItem(VOLUME_STORAGE_KEY);
+          if (raw !== null) {
+            lastVolume = clamp01(raw);
+            volumeEl.value = String(lastVolume);
+          }
+        } catch (_) {}
+      }
+
+      // pitch/volume 패널 열림 상태를 복원합니다. (기본은 닫힘)
+      if (toggleControlsEl && extraControlsEl) {
+        try {
+          const raw = localStorage.getItem(CONTROLS_OPEN_STORAGE_KEY);
+          const isOpen = raw === "true";
+          extraControlsEl.hidden = !isOpen;
+          toggleControlsEl.textContent = isOpen
+            ? "Hide Pitch/Volume settings"
+            : "Pitch/Volume settings";
+        } catch (_) {
+          // localStorage 차단 시 기본 hidden(닫힘) 유지
+          toggleControlsEl.textContent = "Pitch/Volume settings";
         }
       }
 
@@ -173,6 +253,9 @@
         gainNode.connect(audioCtx.destination);
 
         applyTone(lastTone);
+
+        // 재생 중이 아닐 때는 source가 없으므로 volume(gain)만 즉시 적용합니다.
+        applyVolume(lastVolume);
       }
 
       function applyTone(v) {
@@ -192,11 +275,66 @@
         lowpass.Q.setTargetAtTime(q, now, 0.02);
       }
 
+      function playbackRateFromPitch(pitch01) {
+        // pitch(0..1) -> playbackRate(0.5..1.5), 0.5가 정중앙(1.0)입니다.
+        return 0.5 + clamp01(pitch01) * 1.0;
+      }
+
+      function applyPitch(pitch01) {
+        lastPitch = clamp01(pitch01);
+        if (!audioCtx || !source || !source.playbackRate) return;
+
+        const rate = playbackRateFromPitch(lastPitch);
+        const now = audioCtx.currentTime;
+        source.playbackRate.setTargetAtTime(rate, now, 0.02);
+      }
+
+      function applyVolume(volume01) {
+        lastVolume = clamp01(volume01);
+        if (!audioCtx || !gainNode) return;
+
+        const now = audioCtx.currentTime;
+        // 0..1 -> gain(선형). 필요하면 나중에 곡선 보정도 추가 가능.
+        gainNode.gain.setTargetAtTime(lastVolume, now, 0.02);
+      }
+
       if (toneEl) {
         toneEl.addEventListener("input", (e) => {
           applyTone(e.target.value);
           try {
             localStorage.setItem(TONE_STORAGE_KEY, String(lastTone));
+          } catch (_) {}
+        });
+      }
+
+      if (pitchEl) {
+        pitchEl.addEventListener("input", (e) => {
+          applyPitch(e.target.value);
+          try {
+            localStorage.setItem(PITCH_STORAGE_KEY, String(lastPitch));
+          } catch (_) {}
+        });
+      }
+
+      if (volumeEl) {
+        volumeEl.addEventListener("input", (e) => {
+          applyVolume(e.target.value);
+          try {
+            localStorage.setItem(VOLUME_STORAGE_KEY, String(lastVolume));
+          } catch (_) {}
+        });
+      }
+
+      if (toggleControlsEl && extraControlsEl) {
+        toggleControlsEl.addEventListener("click", () => {
+          const willOpen = extraControlsEl.hidden;
+          extraControlsEl.hidden = !willOpen;
+          toggleControlsEl.textContent = willOpen
+            ? "Hide Pitch/Volume settings"
+            : "Pitch/Volume settings";
+
+          try {
+            localStorage.setItem(CONTROLS_OPEN_STORAGE_KEY, String(willOpen));
           } catch (_) {}
         });
       }
@@ -237,6 +375,9 @@
 
             // 피치/음량 슬라이더는 다음 단계에서 연결하고, 지금은 톤(필터)만 적용합니다.
             source.connect(highpass);
+
+            // pitch(0..1) -> playbackRate(0.5..1.5)
+            source.playbackRate.value = playbackRateFromPitch(lastPitch);
             source.start(0);
           })
           .catch((err) => {
