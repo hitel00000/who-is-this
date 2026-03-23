@@ -1,229 +1,230 @@
 <!DOCTYPE html>
 <html lang="ko">
-<head>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
 
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Who is this?</title>
 
-<title>Who is this?</title>
+    <link rel="manifest" href="manifest.json" />
 
-<link rel="manifest" href="manifest.json">
+    <style>
+      * {
+        box-sizing: border-box;
+      }
 
-<style>
+      body {
+        margin: 0;
+        background: #000;
+        color: white;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto;
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+      }
 
-*{
-box-sizing:border-box;
-}
+      header {
+        text-align: center;
+        font-size: 28px;
+        padding: 20px;
+        font-weight: 700;
+      }
 
-body{
-margin:0;
-background:#000;
-color:white;
-font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto;
-display:flex;
-flex-direction:column;
-height:100vh;
-}
+      .tone {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 16px 8px;
+      }
 
-header{
-text-align:center;
-font-size:28px;
-padding:20px;
-font-weight:700;
-}
+      .tone label {
+        font-size: 14px;
+        opacity: 0.7;
+        min-width: 60px;
+      }
 
-.tone{
-display:flex;
-align-items:center;
-gap:12px;
-padding:0 16px 8px;
-}
-.tone label{
-font-size:14px;
-opacity:.7;
-min-width:60px;
-}
-.tone input[type="range"]{
-width:100%;
-}
+      .tone input[type="range"] {
+        width: 100%;
+      }
 
-.grid{
-flex:1;
-display:grid;
-grid-template-columns:1fr 1fr;
-grid-template-rows:1fr 1fr;
-gap:16px;
-padding:16px;
-}
+      .grid {
+        flex: 1;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: 1fr 1fr;
+        gap: 16px;
+        padding: 16px;
+      }
 
-button{
-font-size:34px;
-border:none;
-border-radius:26px;
-font-weight:700;
-color:white;
-box-shadow:0 10px 20px rgba(0,0,0,.4);
-}
+      button {
+        font-size: 34px;
+        border: none;
+        border-radius: 26px;
+        font-weight: 700;
+        color: white;
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
+      }
 
-button:active{
-transform:scale(.95);
-}
+      button:active {
+        transform: scale(0.95);
+      }
 
-.who{background:#ff3b30}
-.ok{background:#34c759}
-.yes{background:#007aff}
-.no{background:#ff9500}
+      .who {
+        background: #ff3b30;
+      }
 
-footer{
-text-align:center;
-opacity:.5;
-padding:10px;
-font-size:14px;
-}
+      .ok {
+        background: #34c759;
+      }
 
-</style>
+      .yes {
+        background: #007aff;
+      }
 
-</head>
+      .no {
+        background: #ff9500;
+      }
 
-<body>
+      footer {
+        text-align: center;
+        opacity: 0.5;
+        padding: 10px;
+        font-size: 14px;
+      }
+    </style>
+  </head>
 
-<header>Who is this?</header>
+  <body>
+    <header>Who is this?</header>
 
-<div class="tone">
-<label for="tone">Tone</label>
-<input id="tone" type="range" min="0" max="1" step="0.01" value="0.55" />
-</div>
+    <div class="tone">
+      <label for="tone">Tone</label>
+      <input id="tone" type="range" min="0" max="1" step="0.01" value="0.55" />
+    </div>
 
-<div class="grid">
+    <div class="grid">
+      <button class="who" onclick="play('who')">누구세요</button>
 
-<button class="who" onclick="play('who')">
-누구세요
-</button>
+      <button class="ok" onclick="play('ok')">괜찮아요</button>
 
-<button class="ok" onclick="play('ok')">
-괜찮아요
-</button>
+      <button class="yes" onclick="play('yes')">네</button>
 
-<button class="yes" onclick="play('yes')">
-네
-</button>
+      <button class="no" onclick="play('no')">아니오</button>
+    </div>
 
-<button class="no" onclick="play('no')">
-아니오
-</button>
+    <footer>Tap button to speak</footer>
 
-</div>
+    <script>
+      // Web Audio API로 mp3를 디코드/재생하면서, 실시간 “톤(색감)” 필터를 0~1 값으로 제어합니다.
+      // 0에 가까울수록 더 먹먹(저역 통과, 고역 감쇠), 1에 가까울수록 더 밝게(고역 통과) 들리도록 HP/LP 컷오프를 바꿉니다.
+      const filePaths = {
+        who: "audio/who.mp3",
+        ok: "audio/ok.mp3",
+        yes: "audio/yes.mp3",
+        no: "audio/no.mp3",
+      };
 
-<footer>Tap button to speak</footer>
+      const toneEl = document.getElementById("tone");
+      let audioCtx = null;
+      const buffers = {};
 
-<script>
+      let source = null;
+      let highpass = null;
+      let lowpass = null;
+      let gainNode = null;
 
-// Web Audio API로 mp3를 디코드/재생하면서, 실시간 “톤(색감)” 필터를 0~1 값으로 제어합니다.
-// 0에 가까울수록 더 먹먹(저역 통과, 고역 감쇠), 1에 가까울수록 더 밝게(고역 통과) 들리도록 HP/LP 컷오프를 바꿉니다.
-const filePaths={
-who:"audio/who.mp3",
-ok:"audio/ok.mp3",
-yes:"audio/yes.mp3",
-no:"audio/no.mp3"
-};
+      let lastTone = toneEl ? parseFloat(toneEl.value) : 0.55;
 
-const toneEl=document.getElementById("tone");
-let audioCtx=null;
-let buffers={};
+      function ensureAudioGraph() {
+        if (audioCtx) return;
 
-let source=null;
-let highpass=null;
-let lowpass=null;
-let gainNode=null;
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-let lastTone=toneEl ? parseFloat(toneEl.value) : 0.55;
+        highpass = audioCtx.createBiquadFilter();
+        highpass.type = "highpass";
 
-function ensureAudioGraph(){
-if(audioCtx) return;
+        lowpass = audioCtx.createBiquadFilter();
+        lowpass.type = "lowpass";
 
-audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+        gainNode = audioCtx.createGain();
+        gainNode.gain.value = 1;
 
-highpass=audioCtx.createBiquadFilter();
-highpass.type="highpass";
+        highpass.connect(lowpass);
+        lowpass.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
 
-lowpass=audioCtx.createBiquadFilter();
-lowpass.type="lowpass";
+        applyTone(lastTone);
+      }
 
-gainNode=audioCtx.createGain();
-gainNode.gain.value=1;
+      function applyTone(v) {
+        lastTone = Number(v);
+        if (!audioCtx || !highpass || !lowpass) return;
 
-highpass.connect(lowpass);
-lowpass.connect(gainNode);
-gainNode.connect(audioCtx.destination);
+        const t = Math.max(0, Math.min(1, lastTone));
 
-applyTone(lastTone);
-}
+        // 톤 0..1 -> HP/LP 컷오프와 약간의 Q 보정
+        const hp = 80 + t * 220; // 80..300 Hz
+        const lp = 800 + t * 7200; // 800..8000 Hz
+        const q = 0.6 + t * 1.0; // 0.6..1.6
 
-function applyTone(v){
-lastTone=Number(v);
-if(!audioCtx || !highpass || !lowpass) return;
+        const now = audioCtx.currentTime;
+        highpass.frequency.setTargetAtTime(hp, now, 0.02);
+        lowpass.frequency.setTargetAtTime(lp, now, 0.02);
+        lowpass.Q.setTargetAtTime(q, now, 0.02);
+      }
 
-const t=Math.max(0,Math.min(1,lastTone));
+      if (toneEl) {
+        toneEl.addEventListener("input", (e) => {
+          applyTone(e.target.value);
+        });
+      }
 
-// 톤 0..1 -> HP/LP 컷오프와 약간의 Q 보정
-const hp=80 + t*220;        // 80..300 Hz
-const lp=800 + t*7200;     // 800..8000 Hz
-const q=0.6 + t*1.0;        // 0.6..1.6
+      async function getBuffer(name) {
+        ensureAudioGraph();
+        if (buffers[name]) return buffers[name];
 
-const now=audioCtx.currentTime;
-highpass.frequency.setTargetAtTime(hp,now,0.02);
-lowpass.frequency.setTargetAtTime(lp,now,0.02);
-lowpass.Q.setTargetAtTime(q,now,0.02);
-}
+        const res = await fetch(filePaths[name]);
+        const ab = await res.arrayBuffer();
+        buffers[name] = await audioCtx.decodeAudioData(ab);
+        return buffers[name];
+      }
 
-if(toneEl){
-toneEl.addEventListener("input",(e)=>{
-applyTone(e.target.value);
-});
-}
+      function play(name) {
+        // onclick="play('who')" 같은 사용자 제스처에서 호출되므로 resume은 여기서 처리
+        ensureAudioGraph();
+        audioCtx.resume();
 
-async function getBuffer(name){
-ensureAudioGraph();
-if(buffers[name]) return buffers[name];
+        if (navigator.vibrate) {
+          navigator.vibrate([100, 50, 100]);
+        }
 
-const res=await fetch(filePaths[name]);
-const ab=await res.arrayBuffer();
-buffers[name]=await audioCtx.decodeAudioData(ab);
-return buffers[name];
-}
+        // 현재 재생 중이면 중단 후 처음부터 다시 시작합니다.
+        if (source) {
+          try {
+            source.stop();
+          } catch (_) {}
+          try {
+            source.disconnect();
+          } catch (_) {}
+        }
 
-function play(name){
-// onclick="play('who')" 같은 사용자 제스처에서 호출되므로 resume은 여기서 처리
-ensureAudioGraph();
-audioCtx.resume();
+        getBuffer(name)
+          .then((buffer) => {
+            source = audioCtx.createBufferSource();
+            source.buffer = buffer;
 
-if(navigator.vibrate){
-navigator.vibrate([100,50,100]);
-}
+            // 피치/음량 슬라이더는 다음 단계에서 연결하고, 지금은 톤(필터)만 적용합니다.
+            source.connect(highpass);
+            source.start(0);
+          })
+          .catch((err) => {
+            console.error("Failed to play audio:", err);
+          });
+      }
 
-// 현재 재생 중이면 중단 후 처음부터 다시 시작합니다.
-if(source){
-try{source.stop();}catch(_){}
-try{source.disconnect();}catch(_){}
-}
-
-getBuffer(name).then((buffer)=>{
-source=audioCtx.createBufferSource();
-source.buffer=buffer;
-
-// 피치/음량 슬라이더는 다음 단계에서 연결하고, 지금은 톤(필터)만 적용합니다.
-source.connect(highpass);
-source.start(0);
-}).catch((err)=>{
-console.error("Failed to play audio:", err);
-});
-}
-
-if("serviceWorker" in navigator){
-navigator.serviceWorker.register("sw.js");
-}
-
-</script>
-
-</body>
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.register("sw.js");
+      }
+    </script>
+  </body>
 </html>
