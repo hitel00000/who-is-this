@@ -32,6 +32,21 @@ padding:20px;
 font-weight:700;
 }
 
+.tone{
+display:flex;
+align-items:center;
+gap:12px;
+padding:0 16px 8px;
+}
+.tone label{
+font-size:14px;
+opacity:.7;
+min-width:60px;
+}
+.tone input[type="range"]{
+width:100%;
+}
+
 .grid{
 flex:1;
 display:grid;
@@ -74,6 +89,11 @@ font-size:14px;
 
 <header>Who is this?</header>
 
+<div class="tone">
+<label for="tone">Tone</label>
+<input id="tone" type="range" min="0" max="1" step="0.01" value="0.55" />
+</div>
+
 <div class="grid">
 
 <button class="who" onclick="play('who')">
@@ -98,24 +118,105 @@ font-size:14px;
 
 <script>
 
-const sounds={
-who:new Audio("audio/who.mp3"),
-ok:new Audio("audio/ok.mp3"),
-yes:new Audio("audio/yes.mp3"),
-no:new Audio("audio/no.mp3")
+// Web Audio API로 mp3를 디코드/재생하면서, 실시간 “톤(색감)” 필터를 0~1 값으로 제어합니다.
+// 0에 가까울수록 더 먹먹(저역 통과, 고역 감쇠), 1에 가까울수록 더 밝게(고역 통과) 들리도록 HP/LP 컷오프를 바꿉니다.
+const filePaths={
+who:"audio/who.mp3",
+ok:"audio/ok.mp3",
+yes:"audio/yes.mp3",
+no:"audio/no.mp3"
 };
 
+const toneEl=document.getElementById("tone");
+let audioCtx=null;
+let buffers={};
+
+let source=null;
+let highpass=null;
+let lowpass=null;
+let gainNode=null;
+
+let lastTone=toneEl ? parseFloat(toneEl.value) : 0.55;
+
+function ensureAudioGraph(){
+if(audioCtx) return;
+
+audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+
+highpass=audioCtx.createBiquadFilter();
+highpass.type="highpass";
+
+lowpass=audioCtx.createBiquadFilter();
+lowpass.type="lowpass";
+
+gainNode=audioCtx.createGain();
+gainNode.gain.value=1;
+
+highpass.connect(lowpass);
+lowpass.connect(gainNode);
+gainNode.connect(audioCtx.destination);
+
+applyTone(lastTone);
+}
+
+function applyTone(v){
+lastTone=Number(v);
+if(!audioCtx || !highpass || !lowpass) return;
+
+const t=Math.max(0,Math.min(1,lastTone));
+
+// 톤 0..1 -> HP/LP 컷오프와 약간의 Q 보정
+const hp=80 + t*220;        // 80..300 Hz
+const lp=800 + t*7200;     // 800..8000 Hz
+const q=0.6 + t*1.0;        // 0.6..1.6
+
+const now=audioCtx.currentTime;
+highpass.frequency.setTargetAtTime(hp,now,0.02);
+lowpass.frequency.setTargetAtTime(lp,now,0.02);
+lowpass.Q.setTargetAtTime(q,now,0.02);
+}
+
+if(toneEl){
+toneEl.addEventListener("input",(e)=>{
+applyTone(e.target.value);
+});
+}
+
+async function getBuffer(name){
+ensureAudioGraph();
+if(buffers[name]) return buffers[name];
+
+const res=await fetch(filePaths[name]);
+const ab=await res.arrayBuffer();
+buffers[name]=await audioCtx.decodeAudioData(ab);
+return buffers[name];
+}
+
 function play(name){
+// onclick="play('who')" 같은 사용자 제스처에서 호출되므로 resume은 여기서 처리
+ensureAudioGraph();
+audioCtx.resume();
 
 if(navigator.vibrate){
 navigator.vibrate([100,50,100]);
 }
 
-let audio=sounds[name];
+// 현재 재생 중이면 중단 후 처음부터 다시 시작합니다.
+if(source){
+try{source.stop();}catch(_){}
+try{source.disconnect();}catch(_){}
+}
 
-audio.currentTime=0;
-audio.play();
+getBuffer(name).then((buffer)=>{
+source=audioCtx.createBufferSource();
+source.buffer=buffer;
 
+// 피치/음량 슬라이더는 다음 단계에서 연결하고, 지금은 톤(필터)만 적용합니다.
+source.connect(highpass);
+source.start(0);
+}).catch((err)=>{
+console.error("Failed to play audio:", err);
+});
 }
 
 if("serviceWorker" in navigator){
