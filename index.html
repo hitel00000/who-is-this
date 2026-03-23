@@ -124,6 +124,8 @@
         no: "audio/no.mp3",
       };
 
+      const TONE_STORAGE_KEY = "who-is-this:tone";
+
       const toneEl = document.getElementById("tone");
       let audioCtx = null;
       const buffers = {};
@@ -134,6 +136,23 @@
       let gainNode = null;
 
       let lastTone = toneEl ? parseFloat(toneEl.value) : 0.55;
+
+      // 페이지 로드 시 저장된 tone 값을 복원합니다.
+      if (toneEl) {
+        try {
+          const raw = localStorage.getItem(TONE_STORAGE_KEY);
+          if (raw !== null) {
+            const v = Number(raw);
+            if (Number.isFinite(v)) {
+              const clamped = Math.max(0, Math.min(1, v));
+              toneEl.value = String(clamped);
+              lastTone = clamped;
+            }
+          }
+        } catch (_) {
+          // localStorage 접근이 차단된 환경에서도 앱이 동작해야 합니다.
+        }
+      }
 
       function ensureAudioGraph() {
         if (audioCtx) return;
@@ -176,6 +195,9 @@
       if (toneEl) {
         toneEl.addEventListener("input", (e) => {
           applyTone(e.target.value);
+          try {
+            localStorage.setItem(TONE_STORAGE_KEY, String(lastTone));
+          } catch (_) {}
         });
       }
 
