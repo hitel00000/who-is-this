@@ -168,6 +168,7 @@
 
       let source = null;
       let highpass = null;
+      let peakingEQ = null;
       let lowpass = null;
       let gainNode = null;
 
@@ -242,13 +243,19 @@
         highpass = audioCtx.createBiquadFilter();
         highpass.type = "highpass";
 
+        peakingEQ = audioCtx.createBiquadFilter();
+        peakingEQ.type = "peaking";
+        peakingEQ.frequency.value = 3000; // 3kHz에 집중
+        peakingEQ.Q.value = 1.5;
+
         lowpass = audioCtx.createBiquadFilter();
         lowpass.type = "lowpass";
 
         gainNode = audioCtx.createGain();
         gainNode.gain.value = 1;
 
-        highpass.connect(lowpass);
+        highpass.connect(peakingEQ);
+        peakingEQ.connect(lowpass);
         lowpass.connect(gainNode);
         gainNode.connect(audioCtx.destination);
 
@@ -260,7 +267,7 @@
 
       function applyTone(v) {
         lastTone = Number(v);
-        if (!audioCtx || !highpass || !lowpass) return;
+        if (!audioCtx || !highpass || !lowpass || !peakingEQ) return;
 
         const t = Math.max(0, Math.min(1, lastTone));
 
@@ -269,10 +276,15 @@
         const lp = 800 + t * 7200; // 800..8000 Hz
         const q = 0.6 + t * 1.0; // 0.6..1.6
 
+        // 이퀄라이저: 톤 값에 따라 3kHz 대역 부스트/컷
+        // 0에 가까울수록 -12dB (어두움), 1에 가까울수록 +12dB (밝음)
+        const eqGain = -12 + t * 24; // -12..+12 dB
+
         const now = audioCtx.currentTime;
         highpass.frequency.setTargetAtTime(hp, now, 0.02);
         lowpass.frequency.setTargetAtTime(lp, now, 0.02);
         lowpass.Q.setTargetAtTime(q, now, 0.02);
+        peakingEQ.gain.setTargetAtTime(eqGain, now, 0.02);
       }
 
       function playbackRateFromPitch(pitch01) {
