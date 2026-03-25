@@ -9,6 +9,10 @@
 ## ✨ 주요 기능
 
 ### 기본 기능
+- **음성 타입 선택**: 여러 음성 중 선택 가능
+  - Default: 기본 음성 (mp3 형식)
+  - Jeongwoong: 정웅의 목소리 (m4a 형식)
+
 - **음성 재생**: 4가지 한글 음성 제공
   - "누구세요" - who
   - "괜찮아요" - ok
@@ -66,10 +70,15 @@ who-is-this/
 ├── generate_tts.py     # 음성 파일 생성 스크립트
 ├── README.md           # 이 파일
 └── audio/              # 음성 파일 디렉토리
-    ├── who.mp3
+    ├── who.mp3         # 기본 음성
     ├── ok.mp3
     ├── yes.mp3
-    └── no.mp3
+    ├── no.mp3
+    └── jeongwoong/     # 정웅의 목소리
+        ├── who.m4a
+        ├── ok.m4a
+        ├── yes.m4a
+        └── no.m4a
 ```
 
 ## 🔧 음성 파일 생성
@@ -80,6 +89,27 @@ gTTS(Google Text-to-Speech)를 사용하여 음성 파일을 생성합니다.
 pip install gtts
 python generate_tts.py
 ```
+
+## 🎵 새로운 음성 타입 추가 방법
+
+1. **음성 파일 준비**
+   - `audio/{voice-type}/` 디렉토리 생성
+   - `who.{ext}`, `ok.{ext}`, `yes.{ext}`, `no.{ext}` 파일 추가
+
+2. **index.html 수정**
+   - `VOICE_TYPES` 객체에 새로운 음성 타입 추가:
+   ```javascript
+   const VOICE_TYPES = {
+     default: { label: "Default", extension: ".mp3", baseDir: "audio" },
+     jeongwoong: { label: "Jeongwoong", extension: ".m4a", baseDir: "audio/jeongwoong" },
+     // 새로운 음성 타입을 여기에 추가
+     newvoice: { label: "New Voice", extension: ".mp3", baseDir: "audio/newvoice" },
+   };
+   ```
+   - 필요한 음성 구문은 `PHRASES` 배열에서 관리됩니다 (이미 who, ok, yes, no 포함)
+
+3. **빌드/재배포**
+   - 변경 사항을 저장하고 서버 재시작
 
 ## 🎨 필터링 동작 원리
 
@@ -93,6 +123,7 @@ Tone 값에 따라 다음과 같이 자동 조절됩니다:
 
 ## 💾 로컬스토리지 저장 항목
 
+- `who-is-this:voiceType` - 선택된 음성 타입 (default/jeongwoong)
 - `who-is-this:tone` - 톤 값
 - `who-is-this:pitch` - 음정 값
 - `who-is-this:volume` - 음량 값

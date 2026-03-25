@@ -47,6 +47,23 @@
         width: 100%;
       }
 
+      .tone select {
+        flex: 1;
+        padding: 8px 12px;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.1);
+        color: white;
+        font-size: 14px;
+        cursor: pointer;
+      }
+
+      .tone select:focus {
+        outline: none;
+        border-color: rgba(255, 255, 255, 0.6);
+        background: rgba(255, 255, 255, 0.15);
+      }
+
       .control-toggle {
         margin: 0 16px 8px;
         width: calc(100% - 32px);
@@ -112,6 +129,11 @@
     <header>Who is this?</header>
 
     <div class="tone">
+      <label for="voiceType">Voice</label>
+      <select id="voiceType"></select>
+    </div>
+
+    <div class="tone">
       <label for="tone">Tone</label>
       <input id="tone" type="range" min="0" max="1" step="0.01" value="0.55" />
     </div>
@@ -145,26 +167,64 @@
     <script>
       // Web Audio API로 mp3를 디코드/재생하면서, 실시간 “톤(색감)” 필터를 0~1 값으로 제어합니다.
       // 0에 가까울수록 더 먹먹(저역 통과, 고역 감쇠), 1에 가까울수록 더 밝게(고역 통과) 들리도록 HP/LP 컷오프를 바꿉니다.
-      const filePaths = {
-        who: "audio/who.mp3",
-        ok: "audio/ok.mp3",
-        yes: "audio/yes.mp3",
-        no: "audio/no.mp3",
+
+      // 음성 타입 설정: 새로운 음성 타입을 추가할 때 여기만 수정하면 됩니다.
+      const VOICE_TYPES = {
+        default: {
+          label: "Default",
+          extension: ".mp3",
+          baseDir: "audio",
+        },
+        jeongwoong: {
+          label: "Jeongwoong",
+          extension: ".m4a",
+          baseDir: "audio/jeongwoong",
+        },
       };
 
+      // 음성 구문 목록: 새로운 음성을 추가할 때 여기만 추가하면 됩니다.
+      const PHRASES = ["who", "ok", "yes", "no"];
+
+      // voiceType에 따라 파일 경로를 동적으로 생성합니다.
+      const getFilePaths = (voiceType) => {
+        const voiceConfig = VOICE_TYPES[voiceType];
+        if (!voiceConfig) return {};
+
+        const paths = {};
+        PHRASES.forEach((phrase) => {
+          paths[phrase] = `${voiceConfig.baseDir}/${phrase}${voiceConfig.extension}`;
+        });
+        return paths;
+      };
+
+      const VOICE_TYPE_STORAGE_KEY = "who-is-this:voiceType";
       const TONE_STORAGE_KEY = "who-is-this:tone";
       const PITCH_STORAGE_KEY = "who-is-this:pitch";
       const VOLUME_STORAGE_KEY = "who-is-this:volume";
       const CONTROLS_OPEN_STORAGE_KEY = "who-is-this:controlsOpen";
 
+      const voiceTypeEl = document.getElementById("voiceType");
       const toneEl = document.getElementById("tone");
       const pitchEl = document.getElementById("pitch");
       const volumeEl = document.getElementById("volume");
       const toggleControlsEl = document.getElementById("toggleControls");
       const extraControlsEl = document.getElementById("extraControls");
 
+      // select 옵션을 VOICE_TYPES 설정에서 동적으로 생성합니다.
+      if (voiceTypeEl) {
+        Object.entries(VOICE_TYPES).forEach(([key, config]) => {
+          const option = document.createElement("option");
+          option.value = key;
+          option.textContent = config.label;
+          voiceTypeEl.appendChild(option);
+        });
+      }
+
       let audioCtx = null;
       const buffers = {};
+
+      let voiceType = "default";
+      let filePaths = getFilePaths(voiceType);
 
       let source = null;
       let highpass = null;
@@ -181,6 +241,19 @@
       let lastTone = toneEl ? parseFloat(toneEl.value) : 0.55;
       let lastPitch = pitchEl ? clamp01(pitchEl.value) : 0.5;
       let lastVolume = volumeEl ? clamp01(volumeEl.value) : 1;
+
+      // 페이지 로드 시 저장된 voiceType을 복원합니다.
+      if (voiceTypeEl) {
+        try {
+          const raw = localStorage.getItem(VOICE_TYPE_STORAGE_KEY);
+          if (raw !== null && (raw === "default" || raw === "jeongwoong")) {
+            voiceType = raw;
+            voiceTypeEl.value = raw;
+            filePaths = getFilePaths(voiceType);
+            buffers = {}; // 음성 타입이 바뀌면 버퍼를 초기화
+          }
+        } catch (_) {}
+      }
 
       // 페이지 로드 시 저장된 tone 값을 복원합니다.
       if (toneEl) {
@@ -308,6 +381,17 @@
         const now = audioCtx.currentTime;
         // 0..1 -> gain(선형). 필요하면 나중에 곡선 보정도 추가 가능.
         gainNode.gain.setTargetAtTime(lastVolume, now, 0.02);
+      }
+
+      if (voiceTypeEl) {
+        voiceTypeEl.addEventListener("change", (e) => {
+          voiceType = e.target.value;
+          filePaths = getFilePaths(voiceType);
+          buffers = {}; // 음성 타입이 바뀌면 버퍼를 초기화
+          try {
+            localStorage.setItem(VOICE_TYPE_STORAGE_KEY, voiceType);
+          } catch (_) {}
+        });
       }
 
       if (toneEl) {
