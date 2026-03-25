@@ -94,10 +94,42 @@
         font-weight: 700;
         color: white;
         box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
+        position: relative;
+        overflow: hidden;
+        transition: opacity 0.1s ease;
       }
 
-      button:active {
+      button:active:not(:disabled) {
         transform: scale(0.95);
+      }
+
+      button:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+      }
+
+      button::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 0;
+        background: rgba(0, 0, 0, 0.2);
+        pointer-events: none;
+      }
+
+      button.playing::before {
+        animation: progressFill linear forwards var(--progress-duration, 1s);
+      }
+
+      @keyframes progressFill {
+        from {
+          width: 0;
+        }
+        to {
+          width: 100%;
+        }
       }
 
       .who {
@@ -469,15 +501,38 @@
             source = audioCtx.createBufferSource();
             source.buffer = buffer;
 
+            // 버튼 UI 업데이트
+            const button = document.querySelector(`button.${name}`);
+            if (button) {
+              button.disabled = true;
+              button.classList.add("playing");
+              // CSS 변수로 animation duration 설정
+              const duration = buffer.duration / source.playbackRate.value;
+              button.style.setProperty("--progress-duration", `${duration}s`);
+            }
+
             // 피치/음량 슬라이더는 다음 단계에서 연결하고, 지금은 톤(필터)만 적용합니다.
             source.connect(highpass);
 
             // pitch(0..1) -> playbackRate(0.5..1.5)
             source.playbackRate.value = playbackRateFromPitch(lastPitch);
             source.start(0);
+
+            // 오디오 재생 종료 시 버튼 복구
+            source.onended = () => {
+              if (button) {
+                button.disabled = false;
+                button.classList.remove("playing");
+              }
+            };
           })
           .catch((err) => {
             console.error("Failed to play audio:", err);
+            const button = document.querySelector(`button.${name}`);
+            if (button) {
+              button.disabled = false;
+              button.classList.remove("playing");
+            }
           });
       }
 
